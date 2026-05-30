@@ -1,12 +1,51 @@
-import { useState } from 'react'
-import { BookOpen, Key, GitBranch, AlertCircle, Loader2 } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { BookOpen, Key, GitBranch, AlertCircle, Loader2, ChevronDown, Plus } from 'lucide-react'
 import { createGitHubClient } from '../lib/github'
+
+const NEW_REPO_VALUE = '__new__'
 
 export default function Setup({ onComplete }) {
   const [token, setToken] = useState('')
-  const [repo, setRepo] = useState('my-journal')
+  const [repos, setRepos] = useState([])       // fetched from GitHub
+  const [repoValue, setRepoValue] = useState('my-journal') // selected or typed
+  const [newRepoName, setNewRepoName] = useState('my-journal')
+  const [fetchingRepos, setFetchingRepos] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const fetchTimer = useRef(null)
+
+  // Auto-fetch repos when token looks valid (starts with ghp_ or github_pat_)
+  useEffect(() => {
+    if (fetchTimer.current) clearTimeout(fetchTimer.current)
+    const trimmed = token.trim()
+    if (trimmed.length < 20) { setRepos([]); return }
+    fetchTimer.current = setTimeout(async () => {
+      setFetchingRepos(true)
+      try {
+        const client = createGitHubClient(trimmed)
+        const res = await fetch('https://api.github.com/user/repos?per_page=100&sort=updated', {
+          headers: { Authorization: `Bearer ${trimmed}`, Accept: 'application/vnd.github+json' }
+        })
+        if (!res.ok) { setRepos([]); return }
+        const data = await res.json()
+        const names = data.map(r => r.name)
+        setRepos(names)
+        // Default to my-journal if it exists, otherwise prompt to create it
+        if (names.includes('my-journal')) {
+          setRepoValue('my-journal')
+        } else {
+          setRepoValue(NEW_REPO_VALUE)
+          setNewRepoName('my-journal')
+        }
+      } catch {
+        setRepos([])
+      } finally {
+        setFetchingRepos(false)
+      }
+    }, 600)
+  }, [token])
+
+  const selectedRepo = repoValue === NEW_REPO_VALUE ? newRepoName : repoValue
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -15,8 +54,8 @@ export default function Setup({ onComplete }) {
     try {
       const client = createGitHubClient(token.trim())
       const user = await client.getUser()
-      await client.ensureRepo(user.login, repo.trim())
-      const config = { token: token.trim(), repo: repo.trim(), username: user.login, avatar: user.avatar_url }
+      await client.ensureRepo(user.login, selectedRepo.trim())
+      const config = { token: token.trim(), repo: selectedRepo.trim(), username: user.login, avatar: user.avatar_url }
       localStorage.setItem('journal_config', JSON.stringify(config))
       onComplete(config, client, user)
     } catch (e) {
@@ -50,8 +89,11 @@ export default function Setup({ onComplete }) {
                 onChange={e => setToken(e.target.value)}
                 placeholder="ghp_xxxxxxxxxxxx"
                 required
-                className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+                className="w-full pl-9 pr-10 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
               />
+              {fetchingRepos && (
+                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-400 animate-spin" />
+              )}
             </div>
             <p className="mt-1.5 text-xs text-gray-500">
               <a
@@ -70,17 +112,50 @@ export default function Setup({ onComplete }) {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Repository name
+              Journal repository
             </label>
-            <input
-              type="text"
-              value={repo}
-              onChange={e => setRepo(e.target.value)}
-              placeholder="my-journal"
-              required
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
-            />
-            <p className="mt-1.5 text-xs text-gray-500">A private repo will be created in your GitHub account if it doesn't exist.</p>
+            {repos.length > 0 ? (
+              <>
+                <div className="relative">
+                  <select
+                    value={repoValue}
+                    onChange={e => setRepoValue(e.target.value)}
+                    className="w-full appearance-none px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent bg-white pr-9"
+                  >
+                    {repos.map(r => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                    <option value={NEW_REPO_VALUE}>+ Create new repo…</option>
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
+                {repoValue === NEW_REPO_VALUE && (
+                  <input
+                    type="text"
+                    value={newRepoName}
+                    onChange={e => setNewRepoName(e.target.value)}
+                    placeholder="my-journal"
+                    required
+                    autoFocus
+                    className="mt-2 w-full px-3 py-2.5 border border-amber-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+                  />
+                )}
+              </>
+            ) : (
+              <input
+                type="text"
+                value={repoValue === NEW_REPO_VALUE ? newRepoName : repoValue}
+                onChange={e => setRepoValue(e.target.value)}
+                placeholder="my-journal"
+                required
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+              />
+            )}
+            <p className="mt-1.5 text-xs text-gray-500">
+              {repos.length > 0
+                ? 'Pick an existing repo or create a new private one.'
+                : 'A private repo will be created if it doesn\'t exist.'}
+            </p>
           </div>
 
           {error && (
@@ -92,7 +167,7 @@ export default function Setup({ onComplete }) {
 
           <button
             type="submit"
-            disabled={loading || !token || !repo}
+            disabled={loading || !token || !selectedRepo.trim()}
             className="w-full bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <GitBranch className="w-4 h-4" />}
