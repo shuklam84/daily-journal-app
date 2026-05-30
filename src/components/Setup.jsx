@@ -7,8 +7,8 @@ const NEW_REPO_VALUE = '__new__'
 export default function Setup({ onComplete }) {
   const [token, setToken] = useState('')
   const [repos, setRepos] = useState([])       // fetched from GitHub
-  const [repoValue, setRepoValue] = useState('my-journal') // selected or typed
-  const [newRepoName, setNewRepoName] = useState('my-journal')
+  const [repoValue, setRepoValue] = useState('daily-journal-app') // selected or typed
+  const [newRepoName, setNewRepoName] = useState('daily-journal-app')
   const [fetchingRepos, setFetchingRepos] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -31,11 +31,13 @@ export default function Setup({ onComplete }) {
         const names = data.map(r => r.name)
         setRepos(names)
         // Default to my-journal if it exists, otherwise prompt to create it
-        if (names.includes('my-journal')) {
+        if (names.includes('daily-journal-app')) {
+          setRepoValue('daily-journal-app')
+        } else if (names.includes('my-journal')) {
           setRepoValue('my-journal')
         } else {
           setRepoValue(NEW_REPO_VALUE)
-          setNewRepoName('my-journal')
+          setNewRepoName('daily-journal-app')
         }
       } catch {
         setRepos([])
@@ -134,7 +136,7 @@ export default function Setup({ onComplete }) {
                     type="text"
                     value={newRepoName}
                     onChange={e => setNewRepoName(e.target.value)}
-                    placeholder="my-journal"
+                    placeholder="daily-journal-app"
                     required
                     autoFocus
                     className="mt-2 w-full px-3 py-2.5 border border-amber-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
@@ -146,7 +148,7 @@ export default function Setup({ onComplete }) {
                 type="text"
                 value={repoValue === NEW_REPO_VALUE ? newRepoName : repoValue}
                 onChange={e => setRepoValue(e.target.value)}
-                placeholder="my-journal"
+                placeholder="daily-journal-app"
                 required
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
               />
